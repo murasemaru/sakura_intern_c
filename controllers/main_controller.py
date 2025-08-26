@@ -6,7 +6,6 @@ from models.user_model import UserModel
 UPLOAD_FOLDER = 'uploads'
 SQL_FOLDER = 'sqls'
 
-
 def index_controller():
     UserModel.init_db()
     files = os.listdir(UPLOAD_FOLDER)
