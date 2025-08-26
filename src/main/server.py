@@ -1,6 +1,7 @@
 from flask import Flask, request, send_from_directory, render_template_string
 import os
 import csv
+import pathlib as Path
 
 UPLOAD_FOLDER = 'uploads'
 SQL_FOLDER = 'sqls'
@@ -41,7 +42,22 @@ HTML = '''
 '''
 
 @app.route('/')
-def index():
+def init():
+    # データベース初期化（仮：usersテーブルを作成）
+    import sqlite3
+    db_path = os.path.join(SQL_FOLDER, 'dev.sqlite3')
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY,
+                content TEXT
+            )
+        """)
+        conn.commit()
+    finally:
+        conn.close()
     files = os.listdir(UPLOAD_FOLDER)
     dev = request.args.get('dev') == '1'
     return render_template_string(HTML, files=files, dev=dev)
@@ -50,6 +66,7 @@ import sqlite3
 # 開発者モード: SQL実行
 @app.route('/dev/sql', methods=['POST'])
 def dev_sql():
+    print("開発者モード: SQL実行")
     dev = True
     sql = request.form.get('sql', '')
     result = ''
@@ -75,6 +92,7 @@ def dev_sql():
 
 @app.route('/upload', methods=['POST'])
 def upload():
+    print("ファイルアップロード")
     file = request.files['file']
     table = request.form.get('table', 'my_table')
     if file and file.filename.endswith('.csv'):
@@ -91,9 +109,11 @@ def upload():
                     if v == '':
                         values.append('NULL')
                     else:
-                        values.append(f"'{v.replace("'", "''")}")
+                        safe_v = v.replace("'", "''")
+                        values.append(f"'{safe_v}'")
                 sql = f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({', '.join(values)});\n"
-                out.write(sql)
+                print(sql)
+                # out.write(sql)
         return 'アップロード＆SQL変換完了！<br><a href="/">戻る</a>'
     return 'CSVファイルを選択してください。<br><a href="/">戻る</a>'
 
