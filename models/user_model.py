@@ -1,7 +1,7 @@
 import sqlite3
 import os
 
-DB_PATH = os.path.join(os.path.dirname(__file__), '../../sqls/dev.sqlite3')
+DB_PATH = os.path.join(os.path.dirname(__file__), '../sqls/dev.sqlite3')
 
 class UserModel:
     @staticmethod
