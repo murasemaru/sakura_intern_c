@@ -1,19 +1,52 @@
 from flask import render_template, request, send_from_directory
 import os
 import csv
+import re
+import sqlite3
 from models.user_model import UserModel
+from openpyxl import load_workbook
 
 UPLOAD_FOLDER = 'uploads'
 SQL_FOLDER = 'sqls'
+META_DB = os.path.join(SQL_FOLDER, 'metadata.sqlite3')
+
+
+def init_metadata_db():
+    """metadataテーブルを初期化"""
+    conn = sqlite3.connect(META_DB)
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS metadata (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                filename TEXT NOT NULL,
+                tablename TEXT NOT NULL
+            )
+        """)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_metadata_list():
+    """metadataテーブルの内容を取得"""
+    conn = sqlite3.connect(META_DB)
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT filename, tablename FROM metadata")
+        return cur.fetchall()  # [(filename, tablename), ...]
+    finally:
+        conn.close()
+
 
 def index_controller():
     UserModel.init_db()
+    init_metadata_db()
     files = os.listdir(UPLOAD_FOLDER)
     dev = request.args.get('dev') == '1'
-    return render_template('index.html', files=files, dev=dev)
+    metadata = get_metadata_list()
+    return render_template('index.html', files=files, dev=dev, metadata=metadata)
 
-import re
-import sqlite3
 
 def safe_filename(filename):
     # 半角英数字とアンダースコアのみ許可
@@ -21,7 +54,19 @@ def safe_filename(filename):
     return re.sub(r'[^A-Za-z0-9_]', '_', name)
 
 
-from openpyxl import load_workbook
+def insert_metadata(filename, tablename):
+    """metadataテーブルにレコードを追加"""
+    conn = sqlite3.connect(META_DB)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO metadata (filename, tablename) VALUES (?, ?)",
+            (filename, tablename)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
 
 def upload_controller():
     file = request.files['file']
@@ -52,6 +97,10 @@ def upload_controller():
                 conn.commit()
             finally:
                 conn.close()
+
+        # metadataへ挿入
+        insert_metadata(filename, table_name)
+
         return render_template('message.html', message=f'アップロード＆SQLite変換完了！<br>DBファイル名: {db_name}')
 
     elif filename.endswith('.xlsx'):
@@ -76,10 +125,17 @@ def upload_controller():
             conn.commit()
         finally:
             conn.close()
+
+        # metadataへ挿入（シートごと）
+        for sheet in wb.sheetnames:
+            table_name = f"{safe_filename(filename)}_{safe_filename(sheet)}"
+            insert_metadata(filename, table_name)
+
         return render_template('message.html', message=f'アップロード＆SQLite変換完了！<br>DBファイル名: {db_name}')
 
     else:
         return render_template('message.html', message='CSVまたはXLSXファイルのみ対応しています。')
+
 
 def download_controller(filename):
     return send_from_directory(UPLOAD_FOLDER, filename, as_attachment=True)
