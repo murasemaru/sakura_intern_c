@@ -12,8 +12,7 @@ class UserModel:
             cur.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY,
-                    name TEXT,
-                    age INTEGER
+                    content TEXT
                 )
             ''')
             conn.commit()
