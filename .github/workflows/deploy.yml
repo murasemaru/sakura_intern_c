@@ -3,7 +3,7 @@ name: deploy app to Sakura Cloud
 on:
   push:
     branches:
-      - aoki-work
+      - main
 
 jobs:
   deploy:
