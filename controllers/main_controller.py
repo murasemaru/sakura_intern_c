@@ -12,6 +12,20 @@ SQL_FOLDER = 'sqls'
 TMP_FOLDER = 'tmp'
 META_DB = os.path.join(SQL_FOLDER, 'metadata.sqlite3')
 
+def delete_metadata_and_db(filename):
+    """同名ファイルのmetadataとDBファイルを削除"""
+    conn = sqlite3.connect(META_DB)
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM metadata WHERE filename=?", (filename,))
+        conn.commit()
+    finally:
+        conn.close()
+    db_name = safe_filename(filename) + '.sqlite3'
+    db_path = os.path.join(SQL_FOLDER, db_name)
+    if os.path.exists(db_path):
+        os.remove(db_path)
+
 
 def init_metadata_db():
     """metadataテーブルを初期化"""
@@ -29,25 +43,44 @@ def init_metadata_db():
     finally:
         conn.close()
 
+def get_metadata_files():
+    """metadataテーブルに登録されているファイル名一覧を取得"""
+    conn = sqlite3.connect(META_DB)
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT DISTINCT filename FROM metadata")
+        rows = cur.fetchall()
+        return [r[0] for r in rows]
+    finally:
+        conn.close()
 
-def get_metadata_list():
-    """metadataテーブルの内容を取得"""
+def get_metadata_list_grouped():
+    """metadataテーブルの内容をデータベースごとにまとめて取得"""
     conn = sqlite3.connect(META_DB)
     try:
         cur = conn.cursor()
         cur.execute("SELECT filename, tablename FROM metadata")
-        return cur.fetchall()  # [(filename, tablename), ...]
+        rows = cur.fetchall()  # [(filename, tablename), ...]
+        grouped = {}
+        for filename, tablename in rows:
+            db_name = os.path.splitext(filename)[0] + '.sqlite3'  # ファイル名からDB名
+            if db_name not in grouped:
+                grouped[db_name] = []
+            grouped[db_name].append(tablename)
+        return grouped  # {'metadata.sqlite3': ['table1', 'table2'], ...}
     finally:
         conn.close()
+
 
 
 def index_controller():
     UserModel.init_db()
     init_metadata_db()
-    files = os.listdir(UPLOAD_FOLDER)
+    files = get_metadata_files()
     dev = request.args.get('dev') == '1'
-    metadata = get_metadata_list()
-    return render_template('index.html', files=files, dev=dev, metadata=metadata)
+    metadata_grouped = get_metadata_list_grouped()  # データベースごとにまとめる
+    return render_template('index.html', files=files, dev=dev, metadata_grouped=metadata_grouped)
+
 
 
 def safe_filename(filename):
@@ -55,21 +88,6 @@ def safe_filename(filename):
     name, _ = os.path.splitext(filename)
     return re.sub(r'[^A-Za-z0-9_]', '_', name)
 
-
-
-def delete_metadata_and_db(filename):
-    """同名ファイルのmetadataとDBファイルを削除"""
-    conn = sqlite3.connect(META_DB)
-    try:
-        cur = conn.cursor()
-        cur.execute("DELETE FROM metadata WHERE filename=?", (filename,))
-        conn.commit()
-    finally:
-        conn.close()
-    db_name = safe_filename(filename) + '.sqlite3'
-    db_path = os.path.join(SQL_FOLDER, db_name)
-    if os.path.exists(db_path):
-        os.remove(db_path)
 
 def insert_metadata(filename, tablename):
     """metadataテーブルにレコードを追加"""
@@ -91,9 +109,6 @@ def upload_controller():
         return render_template('message.html', message='ファイルを選択してください。')
 
     filename = file.filename
-    # 既存の同名ファイル・DB・metadataを削除
-    delete_metadata_and_db(filename)
-
     filepath = os.path.join(UPLOAD_FOLDER, filename)
     file.save(filepath)
     db_name = safe_filename(filename) + '.sqlite3'
@@ -156,14 +171,6 @@ def upload_controller():
     else:
         return render_template('message.html', message='CSVまたはXLSXファイルのみ対応しています。')
 
-
-# 前提として、DBには以下のような管理用テーブルが存在する
-# id(id)、ファイル名(filename)、テーブル名(tabelname)
-# 一つのファイルに複数テーブルが紐づくこともある（.xlsxの場合）
-#　その場合、xlsxの場合はシート名を付与したテーブル名にする
-# DBに保存されているテーブルを.xlsx or .csvに変換
-# 変換したファイルをtmpフォルダに保存する
-# tmpフォルダから該当ファイルをユーザに送信する
 
 def download_controller(filename):
     # filename例: sample.csv, sample.xlsx, sample_sheet1.csv など
@@ -239,12 +246,41 @@ def download_controller(filename):
     else:
         return render_template('message.html', message='対応していない拡張子です')
 
-def delete_all_metadata():
-    """metadataテーブルの全レコードを削除（便利用）"""
-    conn = sqlite3.connect(META_DB)
-    try:
-        cur = conn.cursor()
-        cur.execute("DELETE FROM metadata")
-        conn.commit()
-    finally:
-        conn.close()
+def sql_execute_controller():
+    db_name = request.form.get('dbname')  # HTMLから入力されたDB名
+    sql = request.form.get('sql')
+
+    db_path = os.path.join(SQL_FOLDER, db_name)
+    sql_result = ""
+
+    if not os.path.exists(db_path):
+        sql_result = f"データベース '{db_name}' が存在しません。"
+    else:
+        try:
+            conn = sqlite3.connect(db_path)
+            cur = conn.cursor()
+            cur.execute(sql)
+            # SELECT文ならfetchall
+            if sql.strip().lower().startswith('select'):
+                rows = cur.fetchall()
+                # 結果を見やすく文字列化
+                sql_result = '\n'.join([str(r) for r in rows])
+            else:
+                conn.commit()
+                rows = cur.fetchall()
+                # 結果を見やすく文字列化
+                sql_result = '\n'.join([str(r) for r in rows])
+                # sql_result = f"SQL実行成功: {cur.rowcount} 行が影響を受けました。"
+        except Exception as e:
+            sql_result = f"SQL実行エラー: {e}"
+        finally:
+            conn.close()
+
+    # index_controllerと同じ情報を渡す
+    files = os.listdir('uploads')
+    metadata = index_controller().context['metadata'] if hasattr(index_controller(), 'context') else []
+    dev = True
+
+    metadata_grouped = get_metadata_list_grouped()
+
+    return render_template('index.html', files=files, dev=dev, metadata_grouped=metadata_grouped, sql_result=sql_result)
