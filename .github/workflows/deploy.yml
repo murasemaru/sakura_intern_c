@@ -15,7 +15,7 @@ jobs:
 
       - name: Flaskアプリをデプロイ
         id: deploy
-        uses: aoki-taquan/sacloud-apprun-action-1@v0.2.5
+        uses: aoki-taquan/sacloud-apprun-action-1@v0.2.6
         with:
           use-repository-dockerfile: false
           sakura-api-key: ${{ secrets.SAKURA_API_KEY }}
