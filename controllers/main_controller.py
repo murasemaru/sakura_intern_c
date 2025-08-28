@@ -2,12 +2,14 @@ from flask import render_template, request, send_from_directory
 import os
 import csv
 import re
+import time
 import sqlite3
 from models.user_model import UserModel
-from openpyxl import load_workbook
+from openpyxl import load_workbook, Workbook
 
 UPLOAD_FOLDER = 'uploads'
 SQL_FOLDER = 'sqls'
+TMP_FOLDER = 'tmp'
 META_DB = os.path.join(SQL_FOLDER, 'metadata.sqlite3')
 
 
@@ -54,6 +56,21 @@ def safe_filename(filename):
     return re.sub(r'[^A-Za-z0-9_]', '_', name)
 
 
+
+def delete_metadata_and_db(filename):
+    """同名ファイルのmetadataとDBファイルを削除"""
+    conn = sqlite3.connect(META_DB)
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM metadata WHERE filename=?", (filename,))
+        conn.commit()
+    finally:
+        conn.close()
+    db_name = safe_filename(filename) + '.sqlite3'
+    db_path = os.path.join(SQL_FOLDER, db_name)
+    if os.path.exists(db_path):
+        os.remove(db_path)
+
 def insert_metadata(filename, tablename):
     """metadataテーブルにレコードを追加"""
     conn = sqlite3.connect(META_DB)
@@ -74,6 +91,9 @@ def upload_controller():
         return render_template('message.html', message='ファイルを選択してください。')
 
     filename = file.filename
+    # 既存の同名ファイル・DB・metadataを削除
+    delete_metadata_and_db(filename)
+
     filepath = os.path.join(UPLOAD_FOLDER, filename)
     file.save(filepath)
     db_name = safe_filename(filename) + '.sqlite3'
@@ -137,5 +157,94 @@ def upload_controller():
         return render_template('message.html', message='CSVまたはXLSXファイルのみ対応しています。')
 
 
+# 前提として、DBには以下のような管理用テーブルが存在する
+# id(id)、ファイル名(filename)、テーブル名(tabelname)
+# 一つのファイルに複数テーブルが紐づくこともある（.xlsxの場合）
+#　その場合、xlsxの場合はシート名を付与したテーブル名にする
+# DBに保存されているテーブルを.xlsx or .csvに変換
+# 変換したファイルをtmpフォルダに保存する
+# tmpフォルダから該当ファイルをユーザに送信する
+
 def download_controller(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename, as_attachment=True)
+    # filename例: sample.csv, sample.xlsx, sample_sheet1.csv など
+    # 管理DBから該当テーブル名を取得
+    conn = sqlite3.connect(META_DB)
+    try:
+        cur = conn.cursor()
+        # ファイル名に対応するテーブルをすべて取得
+        cur.execute("SELECT tablename FROM metadata WHERE filename=?", (filename,))
+        tables = [row[0] for row in cur.fetchall()]
+    finally:
+        conn.close()
+
+    if not tables:
+        return render_template('message.html', message='該当ファイルのテーブル情報がありません')
+
+    # DBファイル名を決定
+    db_name = safe_filename(filename) + '.sqlite3'
+    db_path = os.path.join(SQL_FOLDER, db_name)
+    if not os.path.exists(db_path):
+        return render_template('message.html', message='該当DBファイルが存在しません')
+
+    # 拡張子で出力形式を判定
+    ext = os.path.splitext(filename)[1].lower()
+    tmp_basename = safe_filename(filename) + '_' + str(int(time.time()))
+    if ext == '.csv':
+        # 1つ目のテーブルをcsv出力
+        table = tables[0]
+        tmpfile = os.path.join(TMP_FOLDER, tmp_basename + '.csv')
+        conn = sqlite3.connect(db_path)
+        try:
+            cur = conn.cursor()
+            cur.execute(f'SELECT * FROM {table}')
+            rows = cur.fetchall()
+            columns = [desc[0] for desc in cur.description]
+            with open(tmpfile, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(columns)
+                writer.writerows(rows)
+        finally:
+            conn.close()
+        resp = send_from_directory(TMP_FOLDER, os.path.basename(tmpfile), as_attachment=True)
+        try:
+            os.remove(tmpfile)
+        except Exception:
+            pass
+        return resp
+    elif ext == '.xlsx':
+        # 複数テーブルを1つのxlsxに出力
+        tmpfile = os.path.join(TMP_FOLDER, tmp_basename + '.xlsx')
+        wb = Workbook()
+        wb.remove(wb.active)  # デフォルトシート削除
+        conn = sqlite3.connect(db_path)
+        try:
+            cur = conn.cursor()
+            for table in tables:
+                ws = wb.create_sheet(title=table)
+                cur.execute(f'SELECT * FROM {table}')
+                rows = cur.fetchall()
+                columns = [desc[0] for desc in cur.description]
+                ws.append(columns)
+                for row in rows:
+                    ws.append(row)
+            wb.save(tmpfile)
+        finally:
+            conn.close()
+        resp = send_from_directory(TMP_FOLDER, os.path.basename(tmpfile), as_attachment=True)
+        try:
+            os.remove(tmpfile)
+        except Exception:
+            pass
+        return resp
+    else:
+        return render_template('message.html', message='対応していない拡張子です')
+
+def delete_all_metadata():
+    """metadataテーブルの全レコードを削除（便利用）"""
+    conn = sqlite3.connect(META_DB)
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM metadata")
+        conn.commit()
+    finally:
+        conn.close()
