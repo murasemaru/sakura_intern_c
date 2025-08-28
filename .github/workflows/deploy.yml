@@ -35,4 +35,3 @@ jobs:
         run: echo "DEPLOY_PUBLIC_URL=$(echo \"${{ steps.deploy.outputs.public-url }}\" | sed 's/\\//g')" >> $GITHUB_ENV
         env:
           PUBLIC_URL: ${{ steps.deploy.outputs.public-url }}
-          
