@@ -64,7 +64,7 @@ def get_metadata_list_grouped():
         rows = cur.fetchall()  # [(filename, tablename), ...]
         grouped = {}
         for filename, tablename in rows:
-            db_name = os.path.splitext(filename)[0] + '.sqlite3'  # ファイル名からDB名
+            db_name = os.path.splitext(filename)[0] + '.xlsx'  # ファイル名からDB名
             if db_name not in grouped:
                 grouped[db_name] = []
             grouped[db_name].append(tablename)

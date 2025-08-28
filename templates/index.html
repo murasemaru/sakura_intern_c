@@ -36,14 +36,12 @@
   
 {% if dev %}
 <div class="card mb-4">
-  <div class="card-header bg-danger text-white">db名とテーブル名の一覧</div>
+  <div class="card-header bg-danger text-white">テーブル名の一覧</div>
   <ul class="list-group list-group-flush">
     {% for dbname, tables in metadata_grouped.items() %}
       <li class="list-group-item">
-        <!-- クリック可能にする -->
-        <button type="button" class="btn btn-outline-primary btn-sm db-name mb-2" data-dbname="{{ dbname }}">
-          {{ dbname }}
-        </button><br>
+        <!-- クリック不可に変更（テキスト表示のみ） -->
+        <span class="fw-bold">{{ dbname }}</span><br>
         <small class="text-muted">テーブル: {{ tables | join(', ') }}</small>
       </li>
     {% endfor %}
@@ -54,10 +52,7 @@
   <div class="card-header bg-danger text-white">開発者モード: SQL実行</div>
   <div class="card-body">
     <form method="post" action="/dev/sql">
-      <div class="mb-3">
-        <!-- データベース名入力欄 -->
-        <input type="text" name="dbname" id="dbname-input" class="form-control" placeholder="データベース名を入力">
-      </div>
+      <!-- データベース名入力欄を削除 -->
       <div class="mb-3">
         <textarea name="sql" rows="4" class="form-control" placeholder="SQL文を入力"></textarea>
       </div>
