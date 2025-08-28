@@ -27,16 +27,16 @@ def init_metadata_db():
     finally:
         conn.close()
 
-
-# def get_metadata_list():
-#     """metadataテーブルの内容を取得"""
-#     conn = sqlite3.connect(META_DB)
-#     try:
-#         cur = conn.cursor()
-#         cur.execute("SELECT filename, tablename FROM metadata")
-#         return cur.fetchall()  # [(filename, tablename), ...]
-#     finally:
-#         conn.close()
+def get_metadata_files():
+    """metadataテーブルに登録されているファイル名一覧を取得"""
+    conn = sqlite3.connect(META_DB)
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT DISTINCT filename FROM metadata")
+        rows = cur.fetchall()
+        return [r[0] for r in rows]
+    finally:
+        conn.close()
 
 def get_metadata_list_grouped():
     """metadataテーブルの内容をデータベースごとにまとめて取得"""
@@ -60,7 +60,7 @@ def get_metadata_list_grouped():
 def index_controller():
     UserModel.init_db()
     init_metadata_db()
-    files = os.listdir(UPLOAD_FOLDER)
+    files = get_metadata_files()
     dev = request.args.get('dev') == '1'
     metadata_grouped = get_metadata_list_grouped()  # データベースごとにまとめる
     return render_template('index.html', files=files, dev=dev, metadata_grouped=metadata_grouped)
