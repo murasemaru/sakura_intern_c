@@ -269,8 +269,8 @@ def sql_execute_controller():
                 conn.commit()
                 rows = cur.fetchall()
                 # 結果を見やすく文字列化
-                sql_result = '\n'.join([str(r) for r in rows])
-                # sql_result = f"SQL実行成功: {cur.rowcount} 行が影響を受けました。"
+                # sql_result = '\n'.join([str(r) for r in rows])
+                sql_result = f"SQL実行成功: {cur.rowcount} 行が影響を受けました。"
         except Exception as e:
             sql_result = f"SQL実行エラー: {e}"
         finally:
