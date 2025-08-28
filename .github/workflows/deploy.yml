@@ -15,7 +15,7 @@ jobs:
 
       - name: Flaskアプリをデプロイ
         id: deploy
-        uses: aoki-taquan/sacloud-apprun-action-1@v0.2.6
+        uses: aoki-taquan/sacloud-apprun-action-1@v0.1.2
         with:
           use-repository-dockerfile: false
           sakura-api-key: ${{ secrets.SAKURA_API_KEY }}
@@ -28,7 +28,7 @@ jobs:
           object-storage-bucket: ${{ secrets.STORAGE_BUCKET_NAME }}
           object-storage-access-key: ${{ secrets.STORAGE_ACCESS_KEY }}
           object-storage-secret-key: ${{ secrets.STORAGE_SECRET_KEY }}
-          sqlite-db-folder: ./sqls
+          sqlite-db-path: ./sqls/main.sqlite3
           litestream-replicate-interval: 10s
 
       - name: DEPLOY_PUBLIC_URLを環境変数に設定
