@@ -1,5 +1,5 @@
 from flask import Flask
-from controllers.main_controller import index_controller, upload_controller, download_controller
+from controllers.main_controller import index_controller, upload_controller, download_controller, sql_execute_controller
 import os
 
 app = Flask(__name__)
@@ -15,6 +15,10 @@ def upload():
 @app.route('/download/<filename>')
 def download(filename):
     return download_controller(filename)
+
+@app.route('/dev/sql', methods=['POST'])
+def dev_sql():
+    return sql_execute_controller()
 
 if __name__ == '__main__':
     os.makedirs('uploads', exist_ok=True)

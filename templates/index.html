@@ -50,6 +50,9 @@
     <div class="card-body">
       <form method="post" action="/dev/sql">
         <div class="mb-3">
+        <input type="text" name="dbname" class="form-control" placeholder="データベース名を入力">
+      </div>
+        <div class="mb-3">
           <textarea name="sql" rows="4" class="form-control" placeholder="SQL文を入力"></textarea>
         </div>
         <button type="submit" class="btn btn-danger">SQL実行</button>

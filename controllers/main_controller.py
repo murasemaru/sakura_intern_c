@@ -139,3 +139,42 @@ def upload_controller():
 
 def download_controller(filename):
     return send_from_directory(UPLOAD_FOLDER, filename, as_attachment=True)
+
+def sql_execute_controller():
+    db_name = request.form.get('dbname')  # HTMLから入力されたDB名
+    sql = request.form.get('sql')
+
+    db_path = os.path.join(SQL_FOLDER, db_name)
+    sql_result = ""
+
+    if not os.path.exists(db_path):
+        sql_result = f"データベース '{db_name}' が存在しません。"
+    else:
+        try:
+            conn = sqlite3.connect(db_path)
+            cur = conn.cursor()
+            cur.execute(sql)
+            # SELECT文ならfetchall
+            if sql.strip().lower().startswith('select'):
+                rows = cur.fetchall()
+                # 結果を見やすく文字列化
+                sql_result = '\n'.join([str(r) for r in rows])
+            else:
+                conn.commit()
+                rows = cur.fetchall()
+                # 結果を見やすく文字列化
+                sql_result = '\n'.join([str(r) for r in rows])
+                # sql_result = f"SQL実行成功: {cur.rowcount} 行が影響を受けました。"
+        except Exception as e:
+            sql_result = f"SQL実行エラー: {e}"
+        finally:
+            conn.close()
+
+    # index_controllerと同じ情報を渡す
+    files = os.listdir('uploads')
+    metadata = index_controller().context['metadata'] if hasattr(index_controller(), 'context') else []
+    dev = True
+
+    metadata = get_metadata_list()
+
+    return render_template('index.html', files=files, dev=dev, metadata=metadata, sql_result=sql_result)
