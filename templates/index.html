@@ -33,40 +33,53 @@
     </ul>
   </div>
 
-  <div class="card mb-4">
+<div class="card mb-4">
   <div class="card-header">db名とテーブル名の一覧</div>
   <ul class="list-group list-group-flush">
     {% for dbname, tables in metadata_grouped.items() %}
       <li class="list-group-item">
-        <strong>db: {{ dbname }}</strong><br>
+        <!-- クリック可能にする -->
+        <strong class="db-name" style="cursor: pointer;" data-dbname="{{ dbname }}">
+          db: {{ dbname }}
+        </strong><br>
         テーブル: {{ tables | join(', ') }}
       </li>
     {% endfor %}
   </ul>
 </div>
 
-  {% if dev %}
-  <div class="card mb-4 border-danger">
-    <div class="card-header bg-danger text-white">開発者モード: SQL実行</div>
-    <div class="card-body">
-      <form method="post" action="/dev/sql">
-        <div class="mb-3">
-        <input type="text" name="dbname" class="form-control" placeholder="データベース名を入力">
+{% if dev %}
+<div class="card mb-4 border-danger">
+  <div class="card-header bg-danger text-white">開発者モード: SQL実行</div>
+  <div class="card-body">
+    <form method="post" action="/dev/sql">
+      <div class="mb-3">
+        <!-- データベース名入力欄 -->
+        <input type="text" name="dbname" id="dbname-input" class="form-control" placeholder="データベース名を入力">
       </div>
-        <div class="mb-3">
-          <textarea name="sql" rows="4" class="form-control" placeholder="SQL文を入力"></textarea>
-        </div>
-        <button type="submit" class="btn btn-danger">SQL実行</button>
-      </form>
-      {% if sql_result is defined %}
-      <div class="mt-3">
-        <h5>実行結果</h5>
-        <pre class="bg-light p-2 border">{{ sql_result }}</pre>
+      <div class="mb-3">
+        <textarea name="sql" rows="4" class="form-control" placeholder="SQL文を入力"></textarea>
       </div>
-      {% endif %}
+      <button type="submit" class="btn btn-danger">SQL実行</button>
+    </form>
+    {% if sql_result is defined %}
+    <div class="mt-3">
+      <h5>実行結果</h5>
+      <pre class="bg-light p-2 border">{{ sql_result }}</pre>
     </div>
+    {% endif %}
   </div>
-  {% endif %}
 </div>
+
+<!-- === 追加: db名クリックで入力欄にセットするJS === -->
+<script>
+  document.querySelectorAll('.db-name').forEach(function(el) {
+    el.addEventListener('click', function() {
+      var dbname = el.dataset.dbname;
+      document.getElementById('dbname-input').value = dbname;
+    });
+  });
+</script>
+{% endif %}
 </body>
 </html>
