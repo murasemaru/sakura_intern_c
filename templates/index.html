@@ -34,15 +34,16 @@
   </div>
 
   <div class="card mb-4">
-    <div class="card-header">ファイル名とテーブル名の一覧</div>
-    <ul class="list-group list-group-flush">
-      {% for fname, tname in metadata %}
-        <li class="list-group-item">
-          <strong>{{ fname }}</strong> → {{ tname }}
-        </li>
-      {% endfor %}
-    </ul>
-  </div>
+  <div class="card-header">db名とテーブル名の一覧</div>
+  <ul class="list-group list-group-flush">
+    {% for dbname, tables in metadata_grouped.items() %}
+      <li class="list-group-item">
+        <strong>db: {{ dbname }}</strong><br>
+        テーブル: {{ tables | join(', ') }}
+      </li>
+    {% endfor %}
+  </ul>
+</div>
 
   {% if dev %}
   <div class="card mb-4 border-danger">

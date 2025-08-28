@@ -28,15 +28,33 @@ def init_metadata_db():
         conn.close()
 
 
-def get_metadata_list():
-    """metadataテーブルの内容を取得"""
+# def get_metadata_list():
+#     """metadataテーブルの内容を取得"""
+#     conn = sqlite3.connect(META_DB)
+#     try:
+#         cur = conn.cursor()
+#         cur.execute("SELECT filename, tablename FROM metadata")
+#         return cur.fetchall()  # [(filename, tablename), ...]
+#     finally:
+#         conn.close()
+
+def get_metadata_list_grouped():
+    """metadataテーブルの内容をデータベースごとにまとめて取得"""
     conn = sqlite3.connect(META_DB)
     try:
         cur = conn.cursor()
         cur.execute("SELECT filename, tablename FROM metadata")
-        return cur.fetchall()  # [(filename, tablename), ...]
+        rows = cur.fetchall()  # [(filename, tablename), ...]
+        grouped = {}
+        for filename, tablename in rows:
+            db_name = os.path.splitext(filename)[0] + '.sqlite3'  # ファイル名からDB名
+            if db_name not in grouped:
+                grouped[db_name] = []
+            grouped[db_name].append(tablename)
+        return grouped  # {'metadata.sqlite3': ['table1', 'table2'], ...}
     finally:
         conn.close()
+
 
 
 def index_controller():
@@ -44,8 +62,9 @@ def index_controller():
     init_metadata_db()
     files = os.listdir(UPLOAD_FOLDER)
     dev = request.args.get('dev') == '1'
-    metadata = get_metadata_list()
-    return render_template('index.html', files=files, dev=dev, metadata=metadata)
+    metadata_grouped = get_metadata_list_grouped()  # データベースごとにまとめる
+    return render_template('index.html', files=files, dev=dev, metadata_grouped=metadata_grouped)
+
 
 
 def safe_filename(filename):
@@ -175,6 +194,6 @@ def sql_execute_controller():
     metadata = index_controller().context['metadata'] if hasattr(index_controller(), 'context') else []
     dev = True
 
-    metadata = get_metadata_list()
+    metadata_grouped = get_metadata_list_grouped()
 
-    return render_template('index.html', files=files, dev=dev, metadata=metadata, sql_result=sql_result)
+    return render_template('index.html', files=files, dev=dev, metadata_grouped=metadata_grouped, sql_result=sql_result)
