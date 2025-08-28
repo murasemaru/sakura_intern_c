@@ -1,3 +1,4 @@
+
 from flask import render_template, request, send_from_directory
 import os
 import csv
@@ -10,11 +11,11 @@ from openpyxl import load_workbook, Workbook
 UPLOAD_FOLDER = 'uploads'
 SQL_FOLDER = 'sqls'
 TMP_FOLDER = 'tmp'
-META_DB = os.path.join(SQL_FOLDER, 'metadata.sqlite3')
+MAIN_DB = os.path.join(SQL_FOLDER, 'main.sqlite3')
 
 def delete_metadata_and_db(filename):
     """同名ファイルのmetadataとDBファイルを削除"""
-    conn = sqlite3.connect(META_DB)
+    conn = sqlite3.connect(MAIN_DB)
     try:
         cur = conn.cursor()
         cur.execute("DELETE FROM metadata WHERE filename=?", (filename,))
@@ -29,7 +30,7 @@ def delete_metadata_and_db(filename):
 
 def init_metadata_db():
     """metadataテーブルを初期化"""
-    conn = sqlite3.connect(META_DB)
+    conn = sqlite3.connect(MAIN_DB)
     try:
         cur = conn.cursor()
         cur.execute("""
@@ -45,7 +46,7 @@ def init_metadata_db():
 
 def get_metadata_files():
     """metadataテーブルに登録されているファイル名一覧を取得"""
-    conn = sqlite3.connect(META_DB)
+    conn = sqlite3.connect(MAIN_DB)
     try:
         cur = conn.cursor()
         cur.execute("SELECT DISTINCT filename FROM metadata")
@@ -56,7 +57,7 @@ def get_metadata_files():
 
 def get_metadata_list_grouped():
     """metadataテーブルの内容をデータベースごとにまとめて取得"""
-    conn = sqlite3.connect(META_DB)
+    conn = sqlite3.connect(MAIN_DB)
     try:
         cur = conn.cursor()
         cur.execute("SELECT filename, tablename FROM metadata")
@@ -74,7 +75,7 @@ def get_metadata_list_grouped():
 
 
 def index_controller():
-    UserModel.init_db()
+    # UserModel.init_db()
     init_metadata_db()
     files = get_metadata_files()
     dev = request.args.get('dev') == '1'
@@ -88,10 +89,9 @@ def safe_filename(filename):
     name, _ = os.path.splitext(filename)
     return re.sub(r'[^A-Za-z0-9_]', '_', name)
 
-
 def insert_metadata(filename, tablename):
     """metadataテーブルにレコードを追加"""
-    conn = sqlite3.connect(META_DB)
+    conn = sqlite3.connect(MAIN_DB)
     try:
         cur = conn.cursor()
         cur.execute(
@@ -111,11 +111,11 @@ def upload_controller():
     filename = file.filename
     filepath = os.path.join(UPLOAD_FOLDER, filename)
     file.save(filepath)
-    db_name = safe_filename(filename) + '.sqlite3'
-    db_path = os.path.join(SQL_FOLDER, db_name)
-
+    # db_name = safe_filename(filename) + '.sqlite3'
+    db_path = MAIN_DB
+    table_name = ""
     if filename.endswith('.csv'):
-        table_name = safe_filename(filename)
+        table_name = f"{safe_filename(filename)}_{safe_filename(sheet)}_{int(time.time())}"
         with open(filepath, newline='', encoding='utf-8') as f:
             reader = csv.reader(f)
             columns = next(reader)
@@ -136,9 +136,10 @@ def upload_controller():
         # metadataへ挿入
         insert_metadata(filename, table_name)
 
-        return render_template('message.html', message=f'アップロード＆SQLite変換完了！<br>DBファイル名: {db_name}')
+        return render_template('message.html', message=f'アップロード＆SQLite変換完了！<br>DBファイル名: {""}')
 
     elif filename.endswith('.xlsx'):
+        table_names = []
         wb = load_workbook(filepath, data_only=True)
         conn = sqlite3.connect(db_path)
         try:
@@ -149,9 +150,10 @@ def upload_controller():
                 if not rows or not rows[0]:
                     continue
                 columns = [str(c) for c in rows[0]]
-                table_name = f"{safe_filename(filename)}_{safe_filename(sheet)}"
+                table_name = f"{safe_filename(filename)}_{safe_filename(sheet)}_{int(time.time())}"
                 col_defs = ', '.join([f'{c} TEXT' for c in columns])
                 cur.execute(f'CREATE TABLE IF NOT EXISTS {table_name} ({col_defs})')
+                table_names.append(table_name)
                 for row in rows[1:]:
                     values = [v if v is not None and v != '' else None for v in row]
                     col_names = ', '.join(columns)
@@ -162,23 +164,24 @@ def upload_controller():
             conn.close()
 
         # metadataへ挿入（シートごと）
-        for sheet in wb.sheetnames:
-            table_name = f"{safe_filename(filename)}_{safe_filename(sheet)}"
-            insert_metadata(filename, table_name)
+        for tname in table_names:
+            insert_metadata(filename, tname)
 
-        return render_template('message.html', message=f'アップロード＆SQLite変換完了！<br>DBファイル名: {db_name}')
+        return render_template('message.html', message=f'アップロード＆SQLite変換完了！<br>DBファイル名: {""}')
 
     else:
         return render_template('message.html', message='CSVまたはXLSXファイルのみ対応しています。')
 
 
 def download_controller(filename):
-    # filename例: sample.csv, sample.xlsx, sample_sheet1.csv など
-    # 管理DBから該当テーブル名を取得
-    conn = sqlite3.connect(META_DB)
+    """
+    アップロードされたファイル名に対応するテーブルを metadata から取得し、
+    CSV/XLSX 形式で出力する。
+    """
+    # metadata から該当テーブル名を取得
+    conn = sqlite3.connect(MAIN_DB)
     try:
         cur = conn.cursor()
-        # ファイル名に対応するテーブルをすべて取得
         cur.execute("SELECT tablename FROM metadata WHERE filename=?", (filename,))
         tables = [row[0] for row in cur.fetchall()]
     finally:
@@ -187,20 +190,15 @@ def download_controller(filename):
     if not tables:
         return render_template('message.html', message='該当ファイルのテーブル情報がありません')
 
-    # DBファイル名を決定
-    db_name = safe_filename(filename) + '.sqlite3'
-    db_path = os.path.join(SQL_FOLDER, db_name)
-    if not os.path.exists(db_path):
-        return render_template('message.html', message='該当DBファイルが存在しません')
-
     # 拡張子で出力形式を判定
     ext = os.path.splitext(filename)[1].lower()
     tmp_basename = safe_filename(filename) + '_' + str(int(time.time()))
+
     if ext == '.csv':
-        # 1つ目のテーブルをcsv出力
+        # 1つ目のテーブルのみ CSV 出力
         table = tables[0]
         tmpfile = os.path.join(TMP_FOLDER, tmp_basename + '.csv')
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(MAIN_DB)
         try:
             cur = conn.cursor()
             cur.execute(f'SELECT * FROM {table}')
@@ -212,18 +210,20 @@ def download_controller(filename):
                 writer.writerows(rows)
         finally:
             conn.close()
+
         resp = send_from_directory(TMP_FOLDER, os.path.basename(tmpfile), as_attachment=True)
         try:
             os.remove(tmpfile)
         except Exception:
             pass
         return resp
+
     elif ext == '.xlsx':
-        # 複数テーブルを1つのxlsxに出力
+        # 複数テーブルを 1 つの XLSX に出力
         tmpfile = os.path.join(TMP_FOLDER, tmp_basename + '.xlsx')
         wb = Workbook()
         wb.remove(wb.active)  # デフォルトシート削除
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(MAIN_DB)
         try:
             cur = conn.cursor()
             for table in tables:
@@ -237,50 +237,58 @@ def download_controller(filename):
             wb.save(tmpfile)
         finally:
             conn.close()
+
         resp = send_from_directory(TMP_FOLDER, os.path.basename(tmpfile), as_attachment=True)
         try:
             os.remove(tmpfile)
         except Exception:
             pass
         return resp
+
     else:
         return render_template('message.html', message='対応していない拡張子です')
 
-def sql_execute_controller():
-    db_name = request.form.get('dbname')  # HTMLから入力されたDB名
-    sql = request.form.get('sql')
 
-    db_path = os.path.join(SQL_FOLDER, db_name)
+def sql_execute_controller():
+    """
+    HTMLフォームから入力されたSQLを MAIN_DB 上で実行。
+    SELECT 文なら結果を文字列化して返す。
+    INSERT/UPDATE/DELETE なら影響行数を返す。
+    """
+    sql = request.form.get('sql')
     sql_result = ""
 
-    if not os.path.exists(db_path):
-        sql_result = f"データベース '{db_name}' が存在しません。"
+    if not sql:
+        sql_result = "SQL文が入力されていません。"
     else:
         try:
-            conn = sqlite3.connect(db_path)
+            conn = sqlite3.connect(MAIN_DB)
             cur = conn.cursor()
             cur.execute(sql)
-            # SELECT文ならfetchall
             if sql.strip().lower().startswith('select'):
                 rows = cur.fetchall()
                 # 結果を見やすく文字列化
-                sql_result = '\n'.join([str(r) for r in rows])
+                if rows:
+                    sql_result = '\n'.join([str(r) for r in rows])
+                else:
+                    sql_result = "結果なし"
             else:
                 conn.commit()
-                rows = cur.fetchall()
-                # 結果を見やすく文字列化
-                # sql_result = '\n'.join([str(r) for r in rows])
                 sql_result = f"SQL実行成功: {cur.rowcount} 行が影響を受けました。"
         except Exception as e:
             sql_result = f"SQL実行エラー: {e}"
         finally:
             conn.close()
 
-    # index_controllerと同じ情報を渡す
-    files = os.listdir('uploads')
-    metadata = index_controller().context['metadata'] if hasattr(index_controller(), 'context') else []
+    # index_controller と同じ情報を渡す
+    files = get_metadata_files()
     dev = True
-
     metadata_grouped = get_metadata_list_grouped()
 
-    return render_template('index.html', files=files, dev=dev, metadata_grouped=metadata_grouped, sql_result=sql_result)
+    return render_template(
+        'index.html',
+        files=files,
+        dev=dev,
+        metadata_grouped=metadata_grouped,
+        sql_result=sql_result
+    )
