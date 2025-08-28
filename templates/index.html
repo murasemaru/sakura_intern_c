@@ -40,10 +40,10 @@
     {% for dbname, tables in metadata_grouped.items() %}
       <li class="list-group-item">
         <!-- クリック可能にする -->
-        <strong class="db-name" style="cursor: pointer;" data-dbname="{{ dbname }}">
-          db: {{ dbname }}
-        </strong><br>
-        テーブル: {{ tables | join(', ') }}
+        <button type="button" class="btn btn-outline-primary btn-sm db-name mb-2" data-dbname="{{ dbname }}">
+          {{ dbname }}
+        </button><br>
+        <small class="text-muted">テーブル: {{ tables | join(', ') }}</small>
       </li>
     {% endfor %}
   </ul>
